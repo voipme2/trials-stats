@@ -11,7 +11,6 @@ Character index is zero-based.  So, the character at the top of your list in Des
 
 #### TODO
 
-* get Elos working
+* get Elos working (almost there)
 * pretty print the results instead of plopping them in a file
 * specify the output type (json, csv...?)
-

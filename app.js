@@ -3,7 +3,9 @@ var request = require('request'),
     moment = require('moment'),
     process = require('process'),
     ProgressBar = require('progress'),
-    fs = require('fs');
+    fs = require('fs'),
+    csv = require('csv-write-stream');
+
 
 const EventEmitter = require('events'),
     util = require('util');
@@ -59,28 +61,37 @@ function buildEloUrl(date, membershipIds) {
 }
 
 function getElos(gameDetail) {
-    console.log("Getting elos for", Object.keys(gameDetail.players));
-    var gameDate = gameDetail.date;
-    var eloUrl = buildEloUrl(gameDate, Object.keys(gameDetail.players));
+    var gameDate = moment(gameDetail.date).format("YYYY-MM-DD");
+    var eloUrl = buildEloUrl(gameDate, Object.keys(gameDetail.players).map(function(p) { return gameDetail.players[p].membershipId }));
     request({
         url: eloUrl,
         json: true
     }, function (error, response, body) {
         if (!error && response.statusCode === 200) {
             body.forEach(function(elo) {
-                gameDetail.players[elo.membershipId].elo = elo.elo;
+                var pName = Object.keys(gameDetail.players).filter(function(name) {
+                    return gameDetail.players[name].membershipId === elo.elo;
+                });
+
+                var player = gameDetail.players[pName];
+                player.elo = elo.elo;
+                gameDetail.teams[player.teamName].elos.push(elo.elo);
             });
+            
+            gameDetail.teams["Alpha"].averageElo = average(gameDetail.teams["Alpha"].elos); 
+            gameDetail.teams["Bravo"].averageElo = average(gameDetail.teams["Bravo"].elos);
 
             gameDoneEmitter.emit('gameDone', gameDetail);
         } else {
-            console.error("Error: ", eloUrl, response);
+            console.error("Error getting elos ", eloUrl, response);
         }
     })
 }
 
-function calcLightAverage(players) {
-    return Math.ceil(players.reduce(function(a,b) { return a + b }) / players.length);
+function average(arr) {
+    return Math.ceil(arr.reduce(function(a,b) { return a + b }) / arr.length);
 }
+
 
 function getDetails(match) {
     var url = buildPostgameURL(match.instanceId);
@@ -115,7 +126,8 @@ function getDetails(match) {
                     details.teams[p.teamName] = {
                         score: player.values.score.basic.displayValue,
                         result: player.values.standing.basic.displayValue,
-                        lightLevels: []
+                        lightLevels: [],
+                        elos: []
                     }
                 }
                 details.teams[p.teamName].lightLevels.push(p.lightLevel);
@@ -123,10 +135,12 @@ function getDetails(match) {
             });
 
             // get the average light level per team
-            details.teams["Alpha"].lightLevel = calcLightAverage(details.teams["Alpha"].lightLevels); 
-            details.teams["Bravo"].lightLevel = calcLightAverage(details.teams["Bravo"].lightLevels);
+            details.teams["Alpha"].averageLightLevel = average(details.teams["Alpha"].lightLevels); 
+            details.teams["Bravo"].averageLightLevel = average(details.teams["Bravo"].lightLevels);
+
+            // getElos(details);
+
             gameDoneEmitter.emit('gameDone', details);
-            //getElos(details);
         }
     })
 }
@@ -149,11 +163,15 @@ function lookupPlayer(userName) {
                     var characterId = body.Response.data.characters[charIndex].characterBase.characterId;
                     process.stdout.write("OK.\n");
                     getSummary(membershipId, characterId);
+                } else {
+                    process.stdout.write("Error!\n");
+                    console.error(error);
                 }
             })
 
         } else {
-            console.error("Error looking up " + username);
+            process.stdout.write("Error!\n");
+            console.error(error);
         }
     });
 }
@@ -196,15 +214,14 @@ function getSummary(membershipId, characterId) {
 
 function saveDetails(games) {
     var gamesStr = JSON.stringify(games, null, 2);
-    fs.writeFile("./out/games.json", gamesStr, function(err) {
+    fs.writeFile("./out/" + userName + "-games.json", gamesStr, function(err) {
         if (err) throw err;
     });
 }
 
 function summarize(games) {
     // print out the stats
-    var summary = ["Date", "Map", "Matches W", "Matches L", "Match %", "Rounds W", 
-                    "Rounds L", "Round %", "My K/D", "P2 K/D", "P3 K/D"];
+    var summary = [];
     var currentMap;
     games.forEach(function(g) {
         if (!currentMap) {
@@ -257,10 +274,14 @@ function summarize(games) {
 
     summary.push(currentMap);
 
-    var summaryStr = JSON.stringify(summary, null, 2);
-    fs.writeFile("./out/summary.json", summaryStr, function(err) {
-        if (err) throw err;
+
+    var writer = csv({ headers: ["Date", "Map", "Matches W", "Matches L", "Match %", "Rounds W", 
+                    "Rounds L", "Round %", fireteam[0] + " K/D", fireteam[1] + " K/D", fireteam[2] + " K/D"]})
+    writer.pipe(fs.createWriteStream("./out/" + userName + "-summary.csv"))
+    summary.forEach(function(r) {
+        writer.write(r);
     });
+    writer.end()
 }
 
 var args = process.argv.slice(2);
