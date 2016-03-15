@@ -1,12 +1,8 @@
 
-// TODO: insert values here.
-const MEMBERSHIP_ID;
-const PLAYER2_ID;
-const PLAYER3_ID;
-const CHAR_ID;
-
 var request = require('request'),
     moment = require('moment'),
+    process = require('process'),
+    ProgressBar = require('progress'),
     fs = require('fs');
 
 const EventEmitter = require('events'),
@@ -24,14 +20,28 @@ var games = [];
 const gameDoneEmitter = new GameDoneEmitter();
 gameDoneEmitter.on('gameDone', function(game) {
     this.gamesDone += 1;
+    pBar.tick();
     games.push(game);
     if (this.gamesDone === this.gamesStarted) {
-        console.log("Finished!");
         var sorted = games.sort(function(a,b) { 
             return a.date - b.date;
         });
+
+        console.log('\n');
+
+        // build the fireteam
+        var team = sorted[0].players[userName].teamName;
+
+        Object.keys(sorted[0].players).forEach(function(p) {
+            var player = sorted[0].players[p]
+            if (player.teamName === team && player.name != userName) {
+                fireteam.push(player.name);
+            }
+        });
+
         summarize(sorted);
         saveDetails(sorted);
+        console.log("Finished! Data written to ./out/.");
     }
 });
 
@@ -39,7 +49,6 @@ gameDoneEmitter.on('gameStart', function() {
     this.gamesStarted += 1;
 });
 
-var summaryUrl = "http://proxy.guardian.gg/Platform/Destiny/Stats/ActivityHistory/1/" + MEMBERSHIP_ID + "/" + CHAR_ID + "/?mode=14&definitions=true&count=100&page=0&lc=en"
 
 function buildPostgameURL(activityId) {
     return "http://proxy.guardian.gg/Platform/Destiny/Stats/PostGameCarnageReport/" + activityId + "/?definitions=false&lc=en";  
@@ -75,6 +84,7 @@ function calcLightAverage(players) {
 
 function getDetails(match) {
     var url = buildPostgameURL(match.instanceId);
+    // console.log(url);
     request({
         url: url,
         json: true
@@ -82,6 +92,7 @@ function getDetails(match) {
         if (!error && response.statusCode === 200) {
             var details = {
                 date: match.date.valueOf(),
+		        id: match.instanceId,
                 map: match.mapName,
                 players: {},
                 teams: {}
@@ -98,7 +109,7 @@ function getDetails(match) {
                     kdr: player.values.killsDeathsRatio.basic.value
                 };
 
-                details.players[p.membershipId] = p;
+                details.players[p.name] = p;
                 
                 if (!details.teams[p.teamName]) {
                     details.teams[p.teamName] = {
@@ -108,6 +119,7 @@ function getDetails(match) {
                     }
                 }
                 details.teams[p.teamName].lightLevels.push(p.lightLevel);
+
             });
 
             // get the average light level per team
@@ -119,32 +131,72 @@ function getDetails(match) {
     })
 }
 
-// get match summaries
-request({
-    url: summaryUrl,
-    json: true
-}, function (error, response, body) {
+function lookupPlayer(userName) {
+    // get the membership id and character id
+    process.stdout.write("Looking up " + userName + "... ");
+    request({
+        url: "http://proxy.guardian.gg/Platform/Destiny/SearchDestinyPlayer/1/" + userName + "/",
+        json: true
+    }, function(error, response, body) {
+        if (!error && response.statusCode === 200) {
+            var membershipId = body.Response[0].membershipId;
+            // console.log("Looking up character " + charIndex + " for " + membershipId);
+            request({
+                url: "http://proxy.guardian.gg/Platform/Destiny/1/Account/" + membershipId + "/Summary/",
+                json: true
+            }, function(error, response, body) {
+                if (!error && response.statusCode === 200) {
+                    var characterId = body.Response.data.characters[charIndex].characterBase.characterId;
+                    process.stdout.write("OK.\n");
+                    getSummary(membershipId, characterId);
+                }
+            })
 
-    if (!error && response.statusCode === 200) {
-        console.log("Fetching data for " + body.Response.data.activities.length + " matches...");
-        var matches = body.Response.data.activities.map(function(activity) {
-            return {
-                mapName: body.Response.definitions.activities[activity.activityDetails.referenceId].activityName, 
-                instanceId: activity.activityDetails.instanceId, 
-                date: moment(activity.period)
-            }
-        });
+        } else {
+            console.error("Error looking up " + username);
+        }
+    });
+}
 
-        matches.forEach(function(match) {
-            gameDoneEmitter.emit("gameStart");
-            getDetails(match);
-        });
-    }
-});
+function getSummary(membershipId, characterId) {
+    var summaryUrl = "http://proxy.guardian.gg/Platform/Destiny/Stats/ActivityHistory/1/" 
+        + membershipId + "/" + characterId + "/?mode=14&definitions=true&count=100&page=0&lc=en";
+    // console.log("Summary URL: ", summaryUrl);
+   // get match summaries
+    request({
+        url: summaryUrl,
+        json: true
+    }, function (error, response, body) {
+
+        if (!error && response.statusCode === 200) {
+            pBar = new ProgressBar('Fetching details for :total matches... [:bar] :percent', {
+                complete: '=',
+                incomplete: ' ',
+                width: 30,
+                total: body.Response.data.activities.length
+              });
+            
+            var matches = body.Response.data.activities.map(function(activity) {
+                return {
+                    mapName: body.Response.definitions.activities[activity.activityDetails.referenceId].activityName, 
+                    instanceId: activity.activityDetails.instanceId, 
+                    date: moment(activity.period)
+                }
+            });
+
+            matches.forEach(function(match) {
+                gameDoneEmitter.emit("gameStart");
+                getDetails(match);
+            });
+        } else {
+            console.error("Error looking up Trials match summary");
+        }
+    }); 
+}
 
 function saveDetails(games) {
     var gamesStr = JSON.stringify(games, null, 2);
-    fs.writeFile("games.json", gamesStr, function(err) {
+    fs.writeFile("./out/games.json", gamesStr, function(err) {
         if (err) throw err;
     });
 }
@@ -170,7 +222,7 @@ function summarize(games) {
             currentMap = [moment(g.date).format("YYYY-MM-DD"), g.map, 0, 0, 0.0, 0, 0, 0.0, 0, 0, 0];
         } 
 
-        var ourTeamName = g.players[MEMBERSHIP_ID].teamName;
+        var ourTeamName = g.players[userName].teamName;
         var ourTeam = g.teams[ourTeamName], enemyTeam;
         if (ourTeamName === "Alpha") {
             enemyTeam = g.teams.Bravo;
@@ -190,9 +242,9 @@ function summarize(games) {
         currentMap[4] = currentMap[2] / (currentMap[2] + currentMap[3]);
         currentMap[7] = currentMap[5] / (currentMap[5] + currentMap[6]);
 
-        currentMap[8] = currentMap[8] + g.players[MEMBERSHIP_ID].kdr;
-        currentMap[9] = currentMap[9] + g.players[PLAYER2_ID].kdr;
-        currentMap[10] = currentMap[10] + g.players[PLAYER3_ID].kdr;
+        currentMap[8] = currentMap[8] + g.players[fireteam[0]].kdr;
+        currentMap[9] = currentMap[9] + g.players[fireteam[1]].kdr;
+        currentMap[10] = currentMap[10] + g.players[fireteam[2]].kdr;
     });
 
     currentMap[4] = Math.floor(currentMap[4] * 100) + "%";
@@ -206,7 +258,24 @@ function summarize(games) {
     summary.push(currentMap);
 
     var summaryStr = JSON.stringify(summary, null, 2);
-    fs.writeFile("summary.json", summaryStr, function(err) {
+    fs.writeFile("./out/summary.json", summaryStr, function(err) {
         if (err) throw err;
     });
 }
+
+var args = process.argv.slice(2);
+if (args.length < 2) {
+    console.error("Need to specify a gamertag and character index ('0' being the character in the top slot).");
+    process.exit();
+}
+
+var userName = args[0],
+    charIndex = args[1];
+    fireteam = [userName];
+var pBar;
+
+if (!fs.existsSync("./out")){
+    fs.mkdirSync("./out");
+}
+
+lookupPlayer(userName);
