@@ -1,4 +1,3 @@
-
 var request = require('request'),
     moment = require('moment'),
     process = require('process'),
@@ -20,12 +19,12 @@ util.inherits(GameDoneEmitter, EventEmitter);
 var games = [];
 
 const gameDoneEmitter = new GameDoneEmitter();
-gameDoneEmitter.on('gameDone', function(game) {
+gameDoneEmitter.on('gameDone', function (game) {
     this.gamesDone += 1;
     pBar.tick();
     games.push(game);
     if (this.gamesDone === this.gamesStarted) {
-        var sorted = games.sort(function(a,b) { 
+        var sorted = games.sort(function (a, b) {
             return a.date - b.date;
         });
 
@@ -34,7 +33,7 @@ gameDoneEmitter.on('gameDone', function(game) {
         // build the fireteam
         var team = sorted[0].players[userName].teamName;
 
-        Object.keys(sorted[0].players).forEach(function(p) {
+        Object.keys(sorted[0].players).forEach(function (p) {
             var player = sorted[0].players[p]
             if (player.teamName === team && player.name != userName) {
                 fireteam.push(player.name);
@@ -47,39 +46,52 @@ gameDoneEmitter.on('gameDone', function(game) {
     }
 });
 
-gameDoneEmitter.on('gameStart', function() {
+gameDoneEmitter.on('gameStart', function () {
     this.gamesStarted += 1;
 });
 
 
 function buildPostgameURL(activityId) {
-    return "http://proxy.guardian.gg/Platform/Destiny/Stats/PostGameCarnageReport/" + activityId + "/?definitions=false&lc=en";  
+    return "http://proxy.guardian.gg/Platform/Destiny/Stats/PostGameCarnageReport/" + activityId + "/?definitions=false&lc=en";
 }
 
-function buildEloUrl(date, membershipIds) {
-    return "http://api.guardian.gg/elo/history/" + membershipIds.join(',') + "?start=" + date + "&end=" + date + "&mode=14";
+function buildEloUrl(startDate, endDate, membershipIds) {
+    return "http://api.guardian.gg/elo/history/" + membershipIds.join(',')
+        + "?start=" + startDate + "&end=" + endDate + "&mode=14";
 }
 
 function getElos(gameDetail) {
-    var gameDate = moment(gameDetail.date).format("YYYY-MM-DD");
-    var eloUrl = buildEloUrl(gameDate, Object.keys(gameDetail.players).map(function(p) { return gameDetail.players[p].membershipId }));
+    var gameDate = moment(gameDetail.date);
+    var eloUrl = buildEloUrl(gameDate.format("YYYY-MM-DD"),
+        gameDate.add(1, 'days').format("YYYY-MM-DD"),
+        Object.keys(gameDetail.players).map(function (p) {
+            return gameDetail.players[p].membershipId
+        }));
+
     request({
         url: eloUrl,
         json: true
     }, function (error, response, body) {
         if (!error && response.statusCode === 200) {
-            body.forEach(function(elo) {
-                var pName = Object.keys(gameDetail.players).filter(function(name) {
-                    return gameDetail.players[name].membershipId === elo.elo;
-                });
-
+            body.forEach(function (elo) {
+                var pName = Object.keys(gameDetail.players).filter(function (name) {
+                    return gameDetail.players[name].membershipId === elo.membershipId;
+                })[0];
                 var player = gameDetail.players[pName];
                 player.elo = elo.elo;
                 gameDetail.teams[player.teamName].elos.push(elo.elo);
             });
-            
-            gameDetail.teams["Alpha"].averageElo = average(gameDetail.teams["Alpha"].elos); 
-            gameDetail.teams["Bravo"].averageElo = average(gameDetail.teams["Bravo"].elos);
+
+            if (gameDetail.teams["Alpha"].elos.length > 0) {
+                gameDetail.teams["Alpha"].averageElo = average(gameDetail.teams["Alpha"].elos);
+            } else {
+                gameDetail.teams["Alpha"].averageElo = 0;
+            }
+            if (gameDetail.teams["Bravo"].elos.length > 0) {
+                gameDetail.teams["Bravo"].averageElo = average(gameDetail.teams["Bravo"].elos);
+            } else {
+                gameDetail.teams["Bravo"].averageElo = 0;
+            }
 
             gameDoneEmitter.emit('gameDone', gameDetail);
         } else {
@@ -89,7 +101,9 @@ function getElos(gameDetail) {
 }
 
 function average(arr) {
-    return Math.ceil(arr.reduce(function(a,b) { return a + b }) / arr.length);
+    return Math.ceil(arr.reduce(function (a, b) {
+        return a + b
+    }) / arr.length);
 }
 
 
@@ -103,13 +117,13 @@ function getDetails(match) {
         if (!error && response.statusCode === 200) {
             var details = {
                 date: match.date.valueOf(),
-		        id: match.instanceId,
+                id: match.instanceId,
                 map: match.mapName,
                 players: {},
                 teams: {}
-            }
-            var players = body.Response.data.entries.forEach(function(player) {
-                var p =  {
+            };
+            var players = body.Response.data.entries.forEach(function (player) {
+                var p = {
                     name: player.player.destinyUserInfo.displayName,
                     membershipId: player.player.destinyUserInfo.membershipId,
                     lightLevel: player.player.lightLevel,
@@ -121,7 +135,7 @@ function getDetails(match) {
                 };
 
                 details.players[p.name] = p;
-                
+
                 if (!details.teams[p.teamName]) {
                     details.teams[p.teamName] = {
                         score: player.values.score.basic.displayValue,
@@ -135,12 +149,12 @@ function getDetails(match) {
             });
 
             // get the average light level per team
-            details.teams["Alpha"].averageLightLevel = average(details.teams["Alpha"].lightLevels); 
+            details.teams["Alpha"].averageLightLevel = average(details.teams["Alpha"].lightLevels);
             details.teams["Bravo"].averageLightLevel = average(details.teams["Bravo"].lightLevels);
 
-            // getElos(details);
+            getElos(details);
 
-            gameDoneEmitter.emit('gameDone', details);
+//            gameDoneEmitter.emit('gameDone', details);
         }
     })
 }
@@ -151,14 +165,14 @@ function lookupPlayer(userName) {
     request({
         url: "http://proxy.guardian.gg/Platform/Destiny/SearchDestinyPlayer/1/" + userName + "/",
         json: true
-    }, function(error, response, body) {
+    }, function (error, response, body) {
         if (!error && response.statusCode === 200) {
             var membershipId = body.Response[0].membershipId;
             // console.log("Looking up character " + charIndex + " for " + membershipId);
             request({
                 url: "http://proxy.guardian.gg/Platform/Destiny/1/Account/" + membershipId + "/Summary/",
                 json: true
-            }, function(error, response, body) {
+            }, function (error, response, body) {
                 if (!error && response.statusCode === 200) {
                     var characterId = body.Response.data.characters[charIndex].characterBase.characterId;
                     process.stdout.write("OK.\n");
@@ -177,10 +191,10 @@ function lookupPlayer(userName) {
 }
 
 function getSummary(membershipId, characterId) {
-    var summaryUrl = "http://proxy.guardian.gg/Platform/Destiny/Stats/ActivityHistory/1/" 
+    var summaryUrl = "http://proxy.guardian.gg/Platform/Destiny/Stats/ActivityHistory/1/"
         + membershipId + "/" + characterId + "/?mode=14&definitions=true&count=100&page=0&lc=en";
     // console.log("Summary URL: ", summaryUrl);
-   // get match summaries
+    // get match summaries
     request({
         url: summaryUrl,
         json: true
@@ -192,29 +206,29 @@ function getSummary(membershipId, characterId) {
                 incomplete: ' ',
                 width: 30,
                 total: body.Response.data.activities.length
-              });
-            
-            var matches = body.Response.data.activities.map(function(activity) {
+            });
+
+            var matches = body.Response.data.activities.map(function (activity) {
                 return {
-                    mapName: body.Response.definitions.activities[activity.activityDetails.referenceId].activityName, 
-                    instanceId: activity.activityDetails.instanceId, 
+                    mapName: body.Response.definitions.activities[activity.activityDetails.referenceId].activityName,
+                    instanceId: activity.activityDetails.instanceId,
                     date: moment(activity.period)
                 }
             });
 
-            matches.forEach(function(match) {
+            matches.forEach(function (match) {
                 gameDoneEmitter.emit("gameStart");
                 getDetails(match);
             });
         } else {
             console.error("Error looking up Trials match summary");
         }
-    }); 
+    });
 }
 
 function saveDetails(games) {
     var gamesStr = JSON.stringify(games, null, 2);
-    fs.writeFile("./out/" + userName + "-games.json", gamesStr, function(err) {
+    fs.writeFile("./out/" + userName + "-games.json", gamesStr, function (err) {
         if (err) throw err;
     });
 }
@@ -223,10 +237,10 @@ function summarize(games) {
     // print out the stats
     var summary = [];
     var currentMap;
-    games.forEach(function(g) {
+    games.forEach(function (g) {
         if (!currentMap) {
             currentMap = [moment(g.date).format("YYYY-MM-DD"), g.map, 0, 0, 0.0, 0, 0, 0.0, 0, 0, 0];
-        } else if(currentMap[1] !== g.map) {
+        } else if (currentMap[1] !== g.map) {
             // calc the win %, and K/Ds for map
             currentMap[4] = Math.floor(currentMap[4] * 100) + "%";
             currentMap[7] = Math.floor(currentMap[7] * 100) + "%";
@@ -237,7 +251,7 @@ function summarize(games) {
 
             summary.push(currentMap);
             currentMap = [moment(g.date).format("YYYY-MM-DD"), g.map, 0, 0, 0.0, 0, 0, 0.0, 0, 0, 0];
-        } 
+        }
 
         var ourTeamName = g.players[userName].teamName;
         var ourTeam = g.teams[ourTeamName], enemyTeam;
@@ -266,7 +280,7 @@ function summarize(games) {
 
     currentMap[4] = Math.floor(currentMap[4] * 100) + "%";
     currentMap[7] = Math.floor(currentMap[7] * 100) + "%";
-    
+
     var matches = currentMap[2] + currentMap[3];
     currentMap[8] = (currentMap[8] / matches).toFixed(2).toString();
     currentMap[9] = (currentMap[9] / matches).toFixed(2).toString();
@@ -275,13 +289,13 @@ function summarize(games) {
     summary.push(currentMap);
 
 
-    var writer = csv({ headers: ["Date", "Map", "Matches W", "Matches L", "Match %", "Rounds W", 
-                    "Rounds L", "Round %", fireteam[0] + " K/D", fireteam[1] + " K/D", fireteam[2] + " K/D"]})
+    var writer = csv({ headers: ["Date", "Map", "Matches W", "Matches L", "Match %", "Rounds W",
+        "Rounds L", "Round %", fireteam[0] + " K/D", fireteam[1] + " K/D", fireteam[2] + " K/D"]})
     writer.pipe(fs.createWriteStream("./out/" + userName + "-summary.csv"))
-    summary.forEach(function(r) {
+    summary.forEach(function (r) {
         writer.write(r);
     });
-    writer.end()
+    writer.end();
 }
 
 var args = process.argv.slice(2);
@@ -292,10 +306,10 @@ if (args.length < 2) {
 
 var userName = args[0],
     charIndex = args[1];
-    fireteam = [userName];
+fireteam = [userName];
 var pBar;
 
-if (!fs.existsSync("./out")){
+if (!fs.existsSync("./out")) {
     fs.mkdirSync("./out");
 }
 
