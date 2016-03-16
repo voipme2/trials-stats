@@ -6,11 +6,8 @@ Usage:
 
     node app.js <gamertag> <character_index>
 
-Character index is zero-based.  So, the character at the top of your list in Destiny is the 0 one.
+Character index is zero-based.  So, the character at the top of your list in Destiny is the 0 one.  Once you've run that, you
+can get the Elo and Light stats.
 
-
-#### TODO
-
-* get Elos working (almost there)
-* pretty print the results instead of plopping them in a file
-* specify the output type (json, csv...?)
+    node elo-light.js <gamertag>
+    
