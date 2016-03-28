@@ -9,7 +9,7 @@ var fs = require('fs'),
 var games = JSON.parse(fs.readFileSync('./out/' + userName + '-games.json', 'utf8'));
 
 var writer = csv({ headers: ["Map", "Our Elo", "Enemy Elo", "Elo Diff",
-    "Our Light", "Enemy Light", "Light Diff", "Result"]});
+    "Our Light", "Enemy Light", "Light Diff", "Our Score", "Enemey Score", "Result"]});
 writer.pipe(fs.createWriteStream("./out/" + userName + "-elolight.csv"))
 
 games.forEach(function(g) {
@@ -22,6 +22,8 @@ games.forEach(function(g) {
         (myTeam.averageElo - enemyTeam.averageElo),
         myTeam.averageLightLevel, enemyTeam.averageLightLevel,
         (myTeam.averageLightLevel - enemyTeam.averageLightLevel),
+        myTeam.score,
+        enemyTeam.score,
         myTeam.result === 'Defeat' ? 'L' : 'W'];
     writer.write(data);
 });
