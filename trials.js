@@ -152,9 +152,9 @@ function getDetails(match) {
             details.teams["Alpha"].averageLightLevel = average(details.teams["Alpha"].lightLevels);
             details.teams["Bravo"].averageLightLevel = average(details.teams["Bravo"].lightLevels);
 
-            getElos(details);
+            // getElos(details);
 
-            // gameDoneEmitter.emit('gameDone', details);
+            gameDoneEmitter.emit('gameDone', details);
         }
     })
 }
@@ -192,7 +192,7 @@ function lookupPlayer(userName) {
 
 function getSummary(membershipId, characterId) {
     var summaryUrl = "http://proxy.guardian.gg/Platform/Destiny/Stats/ActivityHistory/1/"
-        + membershipId + "/" + characterId + "/?mode=14&definitions=true&count=20&page=0&lc=en";
+        + membershipId + "/" + characterId + "/?mode=14&definitions=true&count=11&page=0&lc=en";
     // console.log("Summary URL: ", summaryUrl);
     // get match summaries
     request({

@@ -8,11 +8,14 @@
   },
   "author": "",
   "license": "ISC",
-  "dependencies" : {
-    "request": "2.69.0",
+  "dependencies": {
+    "cli-table": "^0.3.1",
+    "colors": "1.1.2",
+    "csv-write-stream": "1.0.0",
     "moment": "2.12.0",
     "progress": "1.1.8",
-    "csv-write-stream": "1.0.0",
-    "colors": "1.1.2"
+    "promise": "^7.1.1",
+    "request": "2.69.0",
+    "request-promise": "^3.0.0"
   }
 }
