@@ -19,12 +19,12 @@ util.inherits(GameDoneEmitter, EventEmitter);
 var games = [];
 
 const gameDoneEmitter = new GameDoneEmitter();
-gameDoneEmitter.on('gameDone', function (game) {
+gameDoneEmitter.on('gameDone', function(game) {
     this.gamesDone += 1;
     pBar.tick();
     games.push(game);
     if (this.gamesDone === this.gamesStarted) {
-        var sorted = games.sort(function (a, b) {
+        var sorted = games.sort(function(a, b) {
             return a.date - b.date;
         });
 
@@ -33,7 +33,7 @@ gameDoneEmitter.on('gameDone', function (game) {
         // build the fireteam
         var team = sorted[0].players[userName].teamName;
 
-        Object.keys(sorted[0].players).forEach(function (p) {
+        Object.keys(sorted[0].players).forEach(function(p) {
             var player = sorted[0].players[p]
             if (player.teamName === team && player.name != userName) {
                 fireteam.push(player.name);
@@ -46,7 +46,7 @@ gameDoneEmitter.on('gameDone', function (game) {
     }
 });
 
-gameDoneEmitter.on('gameStart', function () {
+gameDoneEmitter.on('gameStart', function() {
     this.gamesStarted += 1;
 });
 
@@ -56,25 +56,24 @@ function buildPostgameURL(activityId) {
 }
 
 function buildEloUrl(startDate, endDate, membershipIds) {
-    return "http://api.guardian.gg/elo/history/" + membershipIds.join(',')
-        + "?start=" + startDate + "&end=" + endDate + "&mode=14";
+    return "http://api.guardian.gg/elo/history/" + membershipIds.join(',') + "?start=" + startDate + "&end=" + endDate + "&mode=14";
 }
 
 function getElos(gameDetail) {
     var gameDate = moment(gameDetail.date);
     var eloUrl = buildEloUrl(gameDate.format("YYYY-MM-DD"),
         gameDate.add(1, 'days').format("YYYY-MM-DD"),
-        Object.keys(gameDetail.players).map(function (p) {
+        Object.keys(gameDetail.players).map(function(p) {
             return gameDetail.players[p].membershipId
         }));
 
     request({
         url: eloUrl,
         json: true
-    }, function (error, response, body) {
+    }, function(error, response, body) {
         if (!error && response.statusCode === 200) {
-            body.forEach(function (elo) {
-                var pName = Object.keys(gameDetail.players).filter(function (name) {
+            body.forEach(function(elo) {
+                var pName = Object.keys(gameDetail.players).filter(function(name) {
                     return gameDetail.players[name].membershipId === elo.membershipId;
                 })[0];
                 var player = gameDetail.players[pName];
@@ -101,7 +100,7 @@ function getElos(gameDetail) {
 }
 
 function average(arr) {
-    return Math.ceil(arr.reduce(function (a, b) {
+    return Math.ceil(arr.reduce(function(a, b) {
         return a + b
     }) / arr.length);
 }
@@ -113,7 +112,7 @@ function getDetails(match) {
     request({
         url: url,
         json: true
-    }, function (error, response, body) {
+    }, function(error, response, body) {
         if (!error && response.statusCode === 200) {
             var details = {
                 date: match.date.valueOf(),
@@ -122,7 +121,7 @@ function getDetails(match) {
                 players: {},
                 teams: {}
             };
-            var players = body.Response.data.entries.forEach(function (player) {
+            var players = body.Response.data.entries.forEach(function(player) {
                 var p = {
                     name: player.player.destinyUserInfo.displayName,
                     membershipId: player.player.destinyUserInfo.membershipId,
@@ -165,14 +164,14 @@ function lookupPlayer(userName) {
     request({
         url: "http://proxy.guardian.gg/Platform/Destiny/SearchDestinyPlayer/1/" + userName + "/",
         json: true
-    }, function (error, response, body) {
+    }, function(error, response, body) {
         if (!error && response.statusCode === 200) {
             var membershipId = body.Response[0].membershipId;
             // console.log("Looking up character " + charIndex + " for " + membershipId);
             request({
                 url: "http://proxy.guardian.gg/Platform/Destiny/1/Account/" + membershipId + "/Summary/",
                 json: true
-            }, function (error, response, body) {
+            }, function(error, response, body) {
                 if (!error && response.statusCode === 200) {
                     var characterId = body.Response.data.characters[charIndex].characterBase.characterId;
                     process.stdout.write("OK.\n");
@@ -191,14 +190,13 @@ function lookupPlayer(userName) {
 }
 
 function getSummary(membershipId, characterId) {
-    var summaryUrl = "http://proxy.guardian.gg/Platform/Destiny/Stats/ActivityHistory/1/"
-        + membershipId + "/" + characterId + "/?mode=14&definitions=true&count=11&page=0&lc=en";
+    var summaryUrl = "http://proxy.guardian.gg/Platform/Destiny/Stats/ActivityHistory/1/" + membershipId + "/" + characterId + "/?mode=14&definitions=true&count=7&page=0&lc=en";
     // console.log("Summary URL: ", summaryUrl);
     // get match summaries
     request({
         url: summaryUrl,
         json: true
-    }, function (error, response, body) {
+    }, function(error, response, body) {
 
         if (!error && response.statusCode === 200) {
             pBar = new ProgressBar('Fetching details for :total matches... [:bar] :percent', {
@@ -208,7 +206,7 @@ function getSummary(membershipId, characterId) {
                 total: body.Response.data.activities.length
             });
 
-            var matches = body.Response.data.activities.map(function (activity) {
+            var matches = body.Response.data.activities.map(function(activity) {
                 return {
                     mapName: body.Response.definitions.activities[activity.activityDetails.referenceId].activityName,
                     instanceId: activity.activityDetails.instanceId,
@@ -216,7 +214,7 @@ function getSummary(membershipId, characterId) {
                 }
             });
 
-            matches.forEach(function (match) {
+            matches.forEach(function(match) {
                 gameDoneEmitter.emit("gameStart");
                 getDetails(match);
             });
@@ -228,33 +226,51 @@ function getSummary(membershipId, characterId) {
 
 function saveDetails(games) {
     var gamesStr = JSON.stringify(games, null, 2);
-    fs.writeFile("./out/" + userName + "-games.json", gamesStr, function (err) {
+    fs.writeFile("./out/" + userName + "-games.json", gamesStr, function(err) {
         if (err) throw err;
     });
+}
+
+function initMapObject(date, map) {
+    return {
+        date: moment(date).format("YYYY-MM-DD"),
+        map: map,
+        matchWins: 0,
+        matchLosses: 0,
+        matchRatio: 0.0,
+        roundWins: 0,
+        roundLosses: 0,
+        roundRatio: 0.0,
+        playerOneKD: 0,
+        playerTwoKD: 0,
+        playerThreeKD: 0
+    };
 }
 
 function summarize(games) {
     // print out the stats
     var summary = [];
     var currentMap;
-    games.forEach(function (g) {
+    games.forEach(function(g) {
         if (!currentMap) {
-            currentMap = [moment(g.date).format("YYYY-MM-DD"), g.map, 0, 0, 0.0, 0, 0, 0.0, 0, 0, 0];
-        } else if (currentMap[1] !== g.map) {
+            currentMap = initMapObject(g.date, g.map);
+        } else if (currentMap.map !== g.map) {
             // calc the win %, and K/Ds for map
-            currentMap[4] = Math.floor(currentMap[4] * 100) + "%";
-            currentMap[7] = Math.floor(currentMap[7] * 100) + "%";
-            var matches = currentMap[2] + currentMap[3];
-            currentMap[8] = (currentMap[8] / matches).toFixed(2).toString();
-            currentMap[9] = (currentMap[9] / matches).toFixed(2).toString();
-            currentMap[10] = (currentMap[10] / matches).toFixed(2).toString();
+            currentMap.matchRatio = Math.floor(currentMap.matchRatio * 100) + "%";
+            currentMap.roundRatio = Math.floor(currentMap.roundRatio * 100) + "%";
+
+            var matches = currentMap.matchWins + currentMap.matchLosses;
+            currentMap.playerOneKD = (currentMap.playerOneKD / matches).toFixed(2).toString();
+            currentMap.playerTwoKD = (currentMap.playerTwoKD / matches).toFixed(2).toString();
+            currentMap.playerThreeKD = (currentMap.playerThreeKD / matches).toFixed(2).toString();
 
             summary.push(currentMap);
-            currentMap = [moment(g.date).format("YYYY-MM-DD"), g.map, 0, 0, 0.0, 0, 0, 0.0, 0, 0, 0];
+            currentMap = initMapObject(g.date, g.map);
         }
 
         var ourTeamName = g.players[userName].teamName;
-        var ourTeam = g.teams[ourTeamName], enemyTeam;
+        var ourTeam = g.teams[ourTeamName],
+            enemyTeam;
         if (ourTeamName === "Alpha") {
             enemyTeam = g.teams.Bravo;
         } else {
@@ -262,38 +278,41 @@ function summarize(games) {
         }
 
         if (ourTeam.result === "Victory") {
-            currentMap[2] += 1;
+            currentMap.matchWins += 1;
         } else {
-            currentMap[3] += 1;
+            currentMap.matchLosses += 1;
         }
 
-        currentMap[5] += parseInt(ourTeam.score);
-        currentMap[6] += parseInt(enemyTeam.score);
+        currentMap.roundWins += parseInt(ourTeam.score);
+        currentMap.roundLosses += parseInt(enemyTeam.score);
 
-        currentMap[4] = currentMap[2] / (currentMap[2] + currentMap[3]);
-        currentMap[7] = currentMap[5] / (currentMap[5] + currentMap[6]);
+        currentMap.matchRatio = currentMap.matchWins / (currentMap.matchWins + currentMap.matchLosses);
+        currentMap.roundRatio = currentMap.roundWins / (currentMap.roundWins + currentMap.roundLosses);
 
-        currentMap[8] = currentMap[8] + g.players[fireteam[0]].kdr;
-        currentMap[9] = currentMap[9] + g.players[fireteam[1]].kdr;
-        currentMap[10] = currentMap[10] + g.players[fireteam[2]].kdr;
+        currentMap.playerOneKD += g.players[fireteam[0]].kdr;
+        currentMap.playerTwoKD += g.players[fireteam[1]].kdr;
+        currentMap.playerThreeKD += g.players[fireteam[2]].kdr;
     });
 
-    currentMap[4] = Math.floor(currentMap[4] * 100) + "%";
-    currentMap[7] = Math.floor(currentMap[7] * 100) + "%";
+    currentMap.matchRatio = Math.floor(currentMap.matchRatio * 100) + "%";
+    currentMap.roundRatio = Math.floor(currentMap.roundRatio * 100) + "%";
 
-    var matches = currentMap[2] + currentMap[3];
-    currentMap[8] = (currentMap[8] / matches).toFixed(2).toString();
-    currentMap[9] = (currentMap[9] / matches).toFixed(2).toString();
-    currentMap[10] = (currentMap[10] / matches).toFixed(2).toString();
+    var matches = currentMap.matchWins + currentMap.matchLosses;
+    currentMap.playerOneKD = (currentMap.playerOneKD / matches).toFixed(2).toString();
+    currentMap.playerTwoKD = (currentMap.playerTwoKD / matches).toFixed(2).toString();
+    currentMap.playerThreeKD = (currentMap.playerThreeKD / matches).toFixed(2).toString();
 
     summary.push(currentMap);
 
+    var writer = csv({
+        headers: ["Date", "Map", "Matches W", "Matches L", "Match %", "Rounds W",
+            "Rounds L", "Round %", fireteam[0] + " K/D", fireteam[1] + " K/D", fireteam[2] + " K/D"
+        ]
+    })
 
-    var writer = csv({ headers: ["Date", "Map", "Matches W", "Matches L", "Match %", "Rounds W",
-        "Rounds L", "Round %", fireteam[0] + " K/D", fireteam[1] + " K/D", fireteam[2] + " K/D"]})
-    writer.pipe(fs.createWriteStream("./out/" + userName + "-summary.csv"))
-    summary.forEach(function (r) {
-        writer.write(r);
+    writer.pipe(fs.createWriteStream("./out/" + userName + ".summary.csv"))
+    summary.forEach(function(r) {
+        writer.write([r.date, r.map, r.matchWins, r.matchLosses, r.matchRatio, r.roundWins, r.roundLosses, r.roundRatio, r.playerOneKD, r.playerTwoKD, r.playerThreeKD]);
     });
     writer.end();
 }
@@ -306,6 +325,7 @@ if (args.length < 2) {
 
 var userName = args[0],
     charIndex = args[1];
+
 fireteam = [userName];
 var pBar;
 
