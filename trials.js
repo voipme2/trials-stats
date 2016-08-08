@@ -31,14 +31,14 @@ gameDoneEmitter.on('gameDone', function(game) {
         console.log('\n');
 
         // build the fireteam
-        var team = sorted[0].players[userName].teamName;
+        // var team = sorted[0].players[userName].teamName;
 
-        Object.keys(sorted[0].players).forEach(function(p) {
-            var player = sorted[0].players[p]
-            if (player.teamName === team && player.name != userName) {
-                fireteam.push(player.name);
-            }
-        });
+        // Object.keys(sorted[0].players).forEach(function(p) {
+        //     var player = sorted[0].players[p]
+        //     if (player.teamName === team && player.name != userName) {
+        //         fireteam.push(player.name);
+        //     }
+        // });
 
         summarize(sorted);
         saveDetails(sorted);
@@ -189,44 +189,56 @@ function lookupPlayer(userName) {
     });
 }
 
-function getSummary(membershipId, characterId) {
-    var summaryUrl = "http://proxy.guardian.gg/Platform/Destiny/Stats/ActivityHistory/1/" + membershipId + "/" + characterId + "/?mode=14&definitions=true&count=7&page=0&lc=en";
-    // console.log("Summary URL: ", summaryUrl);
-    // get match summaries
+function getGames(membershipId, characterId, finishedCallback, matches, page) {
+    // get pages until we can't get anymore
+    matches = matches || [];
+    page = page || 0;
+    var summaryUrl = "http://proxy.guardian.gg/Platform/Destiny/Stats/ActivityHistory/1/" + membershipId + "/" + characterId + "/?mode=14&definitions=true&count=25" + "&page=" + page + "&lc=en";
+    
     request({
         url: summaryUrl,
         json: true
     }, function(error, response, body) {
-
         if (!error && response.statusCode === 200) {
-            pBar = new ProgressBar('Fetching details for :total matches... [:bar] :percent', {
-                complete: '=',
-                incomplete: ' ',
-                width: 30,
-                total: body.Response.data.activities.length
-            });
+            if (Object.keys(body.Response.data).length === 0) {
+                // we're done!  return what we've got
+                finishedCallback(matches);
+            } else {
+                matches = matches.concat(body.Response.data.activities.map(function(activity) {
+                    return {
+                        mapName: body.Response.definitions.activities[activity.activityDetails.referenceId].activityName,
+                        instanceId: activity.activityDetails.instanceId,
+                        date: moment(activity.period)
+                    }
+                }))
 
-            var matches = body.Response.data.activities.map(function(activity) {
-                return {
-                    mapName: body.Response.definitions.activities[activity.activityDetails.referenceId].activityName,
-                    instanceId: activity.activityDetails.instanceId,
-                    date: moment(activity.period)
-                }
-            });
-
-            matches.forEach(function(match) {
-                gameDoneEmitter.emit("gameStart");
-                getDetails(match);
-            });
+                getGames(membershipId, characterId, finishedCallback, matches, ++page);
+            }
         } else {
             console.error("Error looking up Trials match summary");
         }
     });
 }
 
+function getSummary(membershipId, characterId) {
+    getGames(membershipId, characterId, function(matches) {
+        pBar = new ProgressBar('Fetching details for :total matches... [:bar] :percent', {
+            complete: '=',
+            incomplete: ' ',
+            width: 30,
+            total: matches.length
+        });
+
+        matches.forEach(function(match) {
+            gameDoneEmitter.emit("gameStart");
+            getDetails(match);
+        });
+    });
+}
+
 function saveDetails(games) {
     var gamesStr = JSON.stringify(games, null, 2);
-    fs.writeFile("./out/" + userName + "-games.json", gamesStr, function(err) {
+    fs.writeFile("./out/" + userName + "-" + charIndex + ".games.json", gamesStr, function(err) {
         if (err) throw err;
     });
 }
@@ -241,9 +253,9 @@ function initMapObject(date, map) {
         roundWins: 0,
         roundLosses: 0,
         roundRatio: 0.0,
-        playerOneKD: 0,
-        playerTwoKD: 0,
-        playerThreeKD: 0
+        playerOneKD: 0
+        // playerTwoKD: 0,
+        // playerThreeKD: 0
     };
 }
 
@@ -261,8 +273,8 @@ function summarize(games) {
 
             var matches = currentMap.matchWins + currentMap.matchLosses;
             currentMap.playerOneKD = (currentMap.playerOneKD / matches).toFixed(2).toString();
-            currentMap.playerTwoKD = (currentMap.playerTwoKD / matches).toFixed(2).toString();
-            currentMap.playerThreeKD = (currentMap.playerThreeKD / matches).toFixed(2).toString();
+            // currentMap.playerTwoKD = (currentMap.playerTwoKD / matches).toFixed(2).toString();
+            // currentMap.playerThreeKD = (currentMap.playerThreeKD / matches).toFixed(2).toString();
 
             summary.push(currentMap);
             currentMap = initMapObject(g.date, g.map);
@@ -289,9 +301,9 @@ function summarize(games) {
         currentMap.matchRatio = currentMap.matchWins / (currentMap.matchWins + currentMap.matchLosses);
         currentMap.roundRatio = currentMap.roundWins / (currentMap.roundWins + currentMap.roundLosses);
 
-        currentMap.playerOneKD += g.players[fireteam[0]].kdr;
-        currentMap.playerTwoKD += g.players[fireteam[1]].kdr;
-        currentMap.playerThreeKD += g.players[fireteam[2]].kdr;
+        currentMap.playerOneKD += g.players[userName].kdr;
+        // currentMap.playerTwoKD += g.players[fireteam[1]].kdr;
+        // currentMap.playerThreeKD += g.players[fireteam[2]].kdr;
     });
 
     currentMap.matchRatio = Math.floor(currentMap.matchRatio * 100) + "%";
@@ -299,20 +311,20 @@ function summarize(games) {
 
     var matches = currentMap.matchWins + currentMap.matchLosses;
     currentMap.playerOneKD = (currentMap.playerOneKD / matches).toFixed(2).toString();
-    currentMap.playerTwoKD = (currentMap.playerTwoKD / matches).toFixed(2).toString();
-    currentMap.playerThreeKD = (currentMap.playerThreeKD / matches).toFixed(2).toString();
+    // currentMap.playerTwoKD = (currentMap.playerTwoKD / matches).toFixed(2).toString();
+    // currentMap.playerThreeKD = (currentMap.playerThreeKD / matches).toFixed(2).toString();
 
     summary.push(currentMap);
 
     var writer = csv({
         headers: ["Date", "Map", "Matches W", "Matches L", "Match %", "Rounds W",
-            "Rounds L", "Round %", fireteam[0] + " K/D", fireteam[1] + " K/D", fireteam[2] + " K/D"
+            "Rounds L", "Round %", userName + " K/D"
         ]
     })
 
-    writer.pipe(fs.createWriteStream("./out/" + userName + ".summary.csv"))
+    writer.pipe(fs.createWriteStream("./out/" + userName + "-" + charIndex + ".summary.csv"))
     summary.forEach(function(r) {
-        writer.write([r.date, r.map, r.matchWins, r.matchLosses, r.matchRatio, r.roundWins, r.roundLosses, r.roundRatio, r.playerOneKD, r.playerTwoKD, r.playerThreeKD]);
+        writer.write([r.date, r.map, r.matchWins, r.matchLosses, r.matchRatio, r.roundWins, r.roundLosses, r.roundRatio, r.playerOneKD]);
     });
     writer.end();
 }
@@ -326,7 +338,6 @@ if (args.length < 2) {
 var userName = args[0],
     charIndex = args[1];
 
-fireteam = [userName];
 var pBar;
 
 if (!fs.existsSync("./out")) {
