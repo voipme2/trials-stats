@@ -5,7 +5,6 @@ var request = require('request'),
     fs = require('fs'),
     csv = require('csv-write-stream');
 
-
 const EventEmitter = require('events'),
     util = require('util');
 
@@ -30,19 +29,9 @@ gameDoneEmitter.on('gameDone', function(game) {
 
         console.log('\n');
 
-        // build the fireteam
-        // var team = sorted[0].players[userName].teamName;
-
-        // Object.keys(sorted[0].players).forEach(function(p) {
-        //     var player = sorted[0].players[p]
-        //     if (player.teamName === team && player.name != userName) {
-        //         fireteam.push(player.name);
-        //     }
-        // });
-
         summarize(sorted);
         saveDetails(sorted);
-        console.log("Finished! Data written to ./out/.");
+        console.log("Finished!");
     }
 });
 
@@ -130,7 +119,8 @@ function getDetails(match) {
                     assists: player.values.assists.basic.displayValue,
                     kills: player.values.kills.basic.displayValue,
                     deaths: player.values.deaths.basic.displayValue,
-                    kdr: player.values.killsDeathsRatio.basic.value
+                    kdr: player.values.killsDeathsRatio.basic.value,
+                    kadr: player.values.killsDeathsAssists.basic.value
                 };
 
                 details.players[p.name] = p;
@@ -158,6 +148,8 @@ function getDetails(match) {
     })
 }
 
+const classes = ["Titan", "Hunter", "Warlock"];
+
 function lookupPlayer(userName) {
     // get the membership id and character id
     process.stdout.write("Looking up " + userName + "... ");
@@ -167,15 +159,21 @@ function lookupPlayer(userName) {
     }, function(error, response, body) {
         if (!error && response.statusCode === 200) {
             var membershipId = body.Response[0].membershipId;
-            // console.log("Looking up character " + charIndex + " for " + membershipId);
             request({
                 url: "http://proxy.guardian.gg/Platform/Destiny/1/Account/" + membershipId + "/Summary/",
                 json: true
             }, function(error, response, body) {
                 if (!error && response.statusCode === 200) {
-                    var characterId = body.Response.data.characters[charIndex].characterBase.characterId;
-                    process.stdout.write("OK.\n");
-                    getSummary(membershipId, characterId);
+                    var chars = body.Response.data.characters.map(function(c) {
+                        return {
+                            characterId: c.characterBase.characterId,
+                            classType: classes[c.characterBase.classType]
+                        };
+                    })
+
+                    process.stdout.write("OK. ( " + chars.length + " character" + (chars.length != 1 ? "s" : "") + " )\n");
+                    getSummary(membershipId, chars);
+
                 } else {
                     process.stdout.write("Error!\n");
                     console.error(error);
@@ -194,7 +192,7 @@ function getGames(membershipId, characterId, finishedCallback, matches, page) {
     matches = matches || [];
     page = page || 0;
     var summaryUrl = "http://proxy.guardian.gg/Platform/Destiny/Stats/ActivityHistory/1/" + membershipId + "/" + characterId + "/?mode=14&definitions=true&count=25" + "&page=" + page + "&lc=en";
-    
+
     request({
         url: summaryUrl,
         json: true
@@ -220,25 +218,37 @@ function getGames(membershipId, characterId, finishedCallback, matches, page) {
     });
 }
 
-function getSummary(membershipId, characterId) {
-    getGames(membershipId, characterId, function(matches) {
-        pBar = new ProgressBar('Fetching details for :total matches... [:bar] :percent', {
-            complete: '=',
-            incomplete: ' ',
-            width: 30,
-            total: matches.length
-        });
+function getSummary(membershipId, characters) {
+    var matches = [];
 
-        matches.forEach(function(match) {
-            gameDoneEmitter.emit("gameStart");
-            getDetails(match);
+    var charsCompleted = 0;
+
+    characters.forEach(function(c, i) {
+        getGames(membershipId, c.characterId, function(results) {
+            matches = matches.concat(results);
+            charsCompleted += 1;
+            if (charsCompleted === characters.length) {
+                pBar = new ProgressBar('Fetching details for :total matches... [:bar] :percent', {
+                    complete: '=',
+                    incomplete: ' ',
+                    width: 30,
+                    total: matches.length
+                });
+
+                matches.forEach(function(match) {
+                    gameDoneEmitter.emit("gameStart");
+                    getDetails(match);
+                });
+            }
+
         });
     });
+
 }
 
 function saveDetails(games) {
     var gamesStr = JSON.stringify(games, null, 2);
-    fs.writeFile("./out/" + userName + "-" + charIndex + ".games.json", gamesStr, function(err) {
+    fs.writeFile("./out/" + userName + ".games.json", gamesStr, function(err) {
         if (err) throw err;
     });
 }
@@ -253,9 +263,8 @@ function initMapObject(date, map) {
         roundWins: 0,
         roundLosses: 0,
         roundRatio: 0.0,
-        playerOneKD: 0
-        // playerTwoKD: 0,
-        // playerThreeKD: 0
+        playerKD: 0,
+        playerKAD: 0
     };
 }
 
@@ -272,9 +281,8 @@ function summarize(games) {
             currentMap.roundRatio = Math.floor(currentMap.roundRatio * 100) + "%";
 
             var matches = currentMap.matchWins + currentMap.matchLosses;
-            currentMap.playerOneKD = (currentMap.playerOneKD / matches).toFixed(2).toString();
-            // currentMap.playerTwoKD = (currentMap.playerTwoKD / matches).toFixed(2).toString();
-            // currentMap.playerThreeKD = (currentMap.playerThreeKD / matches).toFixed(2).toString();
+            currentMap.playerKD = (currentMap.playerKD / matches).toFixed(2).toString();
+            currentMap.playerKAD = (currentMap.playerKAD / matches).toFixed(2).toString();
 
             summary.push(currentMap);
             currentMap = initMapObject(g.date, g.map);
@@ -301,42 +309,40 @@ function summarize(games) {
         currentMap.matchRatio = currentMap.matchWins / (currentMap.matchWins + currentMap.matchLosses);
         currentMap.roundRatio = currentMap.roundWins / (currentMap.roundWins + currentMap.roundLosses);
 
-        currentMap.playerOneKD += g.players[userName].kdr;
-        // currentMap.playerTwoKD += g.players[fireteam[1]].kdr;
-        // currentMap.playerThreeKD += g.players[fireteam[2]].kdr;
+        currentMap.playerKD += g.players[userName].kdr;
+        currentMap.playerKAD += g.players[userName].kadr;
+       
     });
 
     currentMap.matchRatio = Math.floor(currentMap.matchRatio * 100) + "%";
     currentMap.roundRatio = Math.floor(currentMap.roundRatio * 100) + "%";
 
     var matches = currentMap.matchWins + currentMap.matchLosses;
-    currentMap.playerOneKD = (currentMap.playerOneKD / matches).toFixed(2).toString();
-    // currentMap.playerTwoKD = (currentMap.playerTwoKD / matches).toFixed(2).toString();
-    // currentMap.playerThreeKD = (currentMap.playerThreeKD / matches).toFixed(2).toString();
-
+    currentMap.playerKD = (currentMap.playerKD / matches).toFixed(2).toString();
+    currentMap.playerKAD = (currentMap.playerKAD / matches).toFixed(2).toString();
+    
     summary.push(currentMap);
 
     var writer = csv({
         headers: ["Date", "Map", "Matches W", "Matches L", "Match %", "Rounds W",
-            "Rounds L", "Round %", userName + " K/D"
+            "Rounds L", "Round %", "K/D", "K+A/D"
         ]
     })
 
-    writer.pipe(fs.createWriteStream("./out/" + userName + "-" + charIndex + ".summary.csv"))
+    writer.pipe(fs.createWriteStream("./out/" + userName + ".summary.csv"))
     summary.forEach(function(r) {
-        writer.write([r.date, r.map, r.matchWins, r.matchLosses, r.matchRatio, r.roundWins, r.roundLosses, r.roundRatio, r.playerOneKD]);
+        writer.write([r.date, r.map, r.matchWins, r.matchLosses, r.matchRatio, r.roundWins, r.roundLosses, r.roundRatio, r.playerKD, r.playerKAD]);
     });
     writer.end();
 }
 
 var args = process.argv.slice(2);
-if (args.length < 2) {
-    console.error("Need to specify a gamertag and character index ('0' being the character in the top slot).");
+if (args.length < 1) {
+    console.error("Need to specify a gamertag.");
     process.exit();
 }
 
-var userName = args[0],
-    charIndex = args[1];
+var userName = args[0];
 
 var pBar;
 
