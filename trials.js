@@ -18,12 +18,12 @@ util.inherits(GameDoneEmitter, EventEmitter);
 var games = [];
 
 const gameDoneEmitter = new GameDoneEmitter();
-gameDoneEmitter.on('gameDone', function(game) {
+gameDoneEmitter.on('gameDone', function (game) {
     this.gamesDone += 1;
     pBar.tick();
     games.push(game);
     if (this.gamesDone === this.gamesStarted) {
-        var sorted = games.sort(function(a, b) {
+        var sorted = games.sort(function (a, b) {
             return a.date - b.date;
         });
 
@@ -35,7 +35,7 @@ gameDoneEmitter.on('gameDone', function(game) {
     }
 });
 
-gameDoneEmitter.on('gameStart', function() {
+gameDoneEmitter.on('gameStart', function () {
     this.gamesStarted += 1;
 });
 
@@ -52,17 +52,17 @@ function getElos(gameDetail) {
     var gameDate = moment(gameDetail.date);
     var eloUrl = buildEloUrl(gameDate.format("YYYY-MM-DD"),
         gameDate.add(1, 'days').format("YYYY-MM-DD"),
-        Object.keys(gameDetail.players).map(function(p) {
+        Object.keys(gameDetail.players).map(function (p) {
             return gameDetail.players[p].membershipId
         }));
 
     request({
         url: eloUrl,
         json: true
-    }, function(error, response, body) {
+    }, function (error, response, body) {
         if (!error && response.statusCode === 200) {
-            body.forEach(function(elo) {
-                var pName = Object.keys(gameDetail.players).filter(function(name) {
+            body.forEach(function (elo) {
+                var pName = Object.keys(gameDetail.players).filter(function (name) {
                     return gameDetail.players[name].membershipId === elo.membershipId;
                 })[0];
                 var player = gameDetail.players[pName];
@@ -89,9 +89,9 @@ function getElos(gameDetail) {
 }
 
 function average(arr) {
-    return Math.ceil(arr.reduce(function(a, b) {
-        return a + b
-    }) / arr.length);
+    return Math.ceil(arr.reduce(function (a, b) {
+            return a + b
+        }) / arr.length);
 }
 
 
@@ -101,7 +101,7 @@ function getDetails(match) {
     request({
         url: url,
         json: true
-    }, function(error, response, body) {
+    }, function (error, response, body) {
         if (!error && response.statusCode === 200) {
             var details = {
                 date: match.date.valueOf(),
@@ -110,7 +110,7 @@ function getDetails(match) {
                 players: {},
                 teams: {}
             };
-            var players = body.Response.data.entries.forEach(function(player) {
+            var players = body.Response.data.entries.forEach(function (player) {
                 var p = {
                     name: player.player.destinyUserInfo.displayName,
                     membershipId: player.player.destinyUserInfo.membershipId,
@@ -156,20 +156,20 @@ function lookupPlayer(userName) {
     request({
         url: "http://proxy.guardian.gg/Platform/Destiny/SearchDestinyPlayer/1/" + userName + "/",
         json: true
-    }, function(error, response, body) {
+    }, function (error, response, body) {
         if (!error && response.statusCode === 200) {
             var membershipId = body.Response[0].membershipId;
             request({
                 url: "http://proxy.guardian.gg/Platform/Destiny/1/Account/" + membershipId + "/Summary/",
                 json: true
-            }, function(error, response, body) {
+            }, function (error, response, body) {
                 if (!error && response.statusCode === 200) {
-                    var chars = body.Response.data.characters.map(function(c) {
+                    var chars = body.Response.data.characters.map(function (c) {
                         return {
                             characterId: c.characterBase.characterId,
                             classType: classes[c.characterBase.classType]
                         };
-                    })
+                    });
 
                     process.stdout.write("OK. ( " + chars.length + " character" + (chars.length != 1 ? "s" : "") + " )\n");
                     getSummary(membershipId, chars);
@@ -187,22 +187,25 @@ function lookupPlayer(userName) {
     });
 }
 
-function getGames(membershipId, characterId, finishedCallback, matches, page) {
+function getGames(membershipId, characterId, finishedCallback, previousDate, matches, page) {
     // get pages until we can't get anymore
     matches = matches || [];
     page = page || 0;
-    var summaryUrl = "http://proxy.guardian.gg/Platform/Destiny/Stats/ActivityHistory/1/" + membershipId + "/" + characterId + "/?mode=14&definitions=true&count=25" + "&page=" + page + "&lc=en";
+    var summaryUrl = "http://proxy.guardian.gg/Platform/Destiny/Stats/ActivityHistory/1/"
+        + membershipId + "/"
+        + characterId + "/?mode=14&definitions=true&count=25"
+        + "&page=" + page + "&lc=en";
 
     request({
         url: summaryUrl,
         json: true
-    }, function(error, response, body) {
+    }, function (error, response, body) {
         if (!error && response.statusCode === 200) {
             if (Object.keys(body.Response.data).length === 0) {
                 // we're done!  return what we've got
                 finishedCallback(matches);
             } else {
-                matches = matches.concat(body.Response.data.activities.map(function(activity) {
+                matches = matches.concat(body.Response.data.activities.map(function (activity) {
                     return {
                         mapName: body.Response.definitions.activities[activity.activityDetails.referenceId].activityName,
                         instanceId: activity.activityDetails.instanceId,
@@ -210,7 +213,7 @@ function getGames(membershipId, characterId, finishedCallback, matches, page) {
                     }
                 }))
 
-                getGames(membershipId, characterId, finishedCallback, matches, ++page);
+                getGames(membershipId, characterId, finishedCallback, previousDate, matches, ++page);
             }
         } else {
             console.error("Error looking up Trials match summary");
@@ -223,8 +226,8 @@ function getSummary(membershipId, characters) {
 
     var charsCompleted = 0;
 
-    characters.forEach(function(c, i) {
-        getGames(membershipId, c.characterId, function(results) {
+    characters.forEach(function (c, i) {
+        getGames(membershipId, c.characterId, function (results) {
             matches = matches.concat(results);
             charsCompleted += 1;
             if (charsCompleted === characters.length) {
@@ -235,7 +238,14 @@ function getSummary(membershipId, characters) {
                     total: matches.length
                 });
 
-                matches.forEach(function(match) {
+                var matchesToFetch = [];
+                matches.sort(function(a,b) { return b.date - a.date; })
+                    .some(function(m) {
+                        matchesToFetch.push(m);
+                        return m.id === lastActivityId;
+                    });
+
+                matchesToFetch.forEach(function (match) {
                     gameDoneEmitter.emit("gameStart");
                     getDetails(match);
                 });
@@ -248,7 +258,7 @@ function getSummary(membershipId, characters) {
 
 function saveDetails(games) {
     var gamesStr = JSON.stringify(games, null, 2);
-    fs.writeFile("./out/" + userName + ".games.json", gamesStr, function(err) {
+    fs.writeFile(gameFilename, gamesStr, function (err) {
         if (err) throw err;
     });
 }
@@ -272,7 +282,7 @@ function summarize(games) {
     // print out the stats
     var summary = [];
     var currentMap;
-    games.forEach(function(g) {
+    games.forEach(function (g) {
         if (!currentMap) {
             currentMap = initMapObject(g.date, g.map);
         } else if (currentMap.map !== g.map) {
@@ -311,7 +321,7 @@ function summarize(games) {
 
         currentMap.playerKD += g.players[userName].kdr;
         currentMap.playerKAD += g.players[userName].kadr;
-       
+
     });
 
     currentMap.matchRatio = Math.floor(currentMap.matchRatio * 100) + "%";
@@ -320,17 +330,17 @@ function summarize(games) {
     var matches = currentMap.matchWins + currentMap.matchLosses;
     currentMap.playerKD = (currentMap.playerKD / matches).toFixed(2).toString();
     currentMap.playerKAD = (currentMap.playerKAD / matches).toFixed(2).toString();
-    
+
     summary.push(currentMap);
 
     var writer = csv({
         headers: ["Date", "Map", "Matches W", "Matches L", "Match %", "Rounds W",
             "Rounds L", "Round %", "K/D", "K+A/D"
         ]
-    })
+    });
 
     writer.pipe(fs.createWriteStream("./out/" + userName + ".summary.csv"))
-    summary.forEach(function(r) {
+    summary.forEach(function (r) {
         writer.write([r.date, r.map, r.matchWins, r.matchLosses, r.matchRatio, r.roundWins, r.roundLosses, r.roundRatio, r.playerKD, r.playerKAD]);
     });
     writer.end();
@@ -343,6 +353,16 @@ if (args.length < 1) {
 }
 
 var userName = args[0];
+var gameFilename = "./out/" + userName + ".games.json";
+var lastActivityId;
+try {
+    fs.accessSync(gameFilename, fs.F_OK);
+    var prevGames = require(gameFilename);
+    var sorted = prevGames.sort(function(a,b) { return a.date - b.date; });
+    lastActivityId = sorted[sorted.length - 1].id;
+} catch (e) {
+    console.warn("No previous games found, fetching all games for " + userName + ".");
+}
 
 var pBar;
 
@@ -350,4 +370,4 @@ if (!fs.existsSync("./out")) {
     fs.mkdirSync("./out");
 }
 
-lookupPlayer(userName);
+lookupPlayer(userName, lastActivityId);

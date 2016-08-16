@@ -9,8 +9,7 @@ if (args.length < 2) {
     process.exit();
 }
 
-var userName = args[0],
-    charIndex = args[1];
+var userName = args[0];
 
 var fs = require('fs'),
     csv = require('csv-write-stream');
@@ -41,10 +40,10 @@ if (!Array.prototype.find) {
 }
 
 function getEloLightChart() {
-    var games = loadGames();
+    var games = loadGames(userName);
 
     var writer = csv({ headers: ["Map", "Our Elo", "Enemy Elo", "Elo Diff", "Our Score", "Enemy Score", "Result"] });
-    writer.pipe(fs.createWriteStream("./out/" + userName + "-elolight.csv"));
+    writer.pipe(fs.createWriteStream("./out/" + userName + ".elolight.csv"));
 
     games.forEach(function(g) {
         var myTeamName = g.players[userName].teamName;
@@ -68,8 +67,14 @@ function getEloLightChart() {
 
 //getEloLightChart();
 
-function loadGames() {
-    return JSON.parse(fs.readFileSync('./out/' + userName + '-' + charIndex + '.games.json', 'utf8'));
+function loadGames(username) {
+    try {
+        var fname = "./out/" + username + ".games.json";
+        fs.accessSync(fname, fs.F_OK);
+        return require(fname);
+    } catch (e) {
+        return null
+    }
 }
 
 function average(arr) {
@@ -80,7 +85,7 @@ function average(arr) {
 }
 
 function getPlayerElos(callback) {
-    var games = loadGames();
+    var games = loadGames(userName);
 
     var players = {},
         startDate, endDate;
