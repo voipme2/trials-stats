@@ -141,8 +141,6 @@ function getDetails(match) {
             details.teams["Alpha"].averageLightLevel = average(details.teams["Alpha"].lightLevels);
             details.teams["Bravo"].averageLightLevel = average(details.teams["Bravo"].lightLevels);
 
-            // getElos(details);
-
             gameDoneEmitter.emit('gameDone', details);
         }
     })
@@ -171,7 +169,7 @@ function lookupPlayer(userName) {
                         };
                     });
 
-                    process.stdout.write("OK. ( " + chars.length + " character" + (chars.length != 1 ? "s" : "") + " )\n");
+                    process.stdout.write("OK.\n");
                     getSummary(membershipId, chars);
 
                 } else {
@@ -193,7 +191,7 @@ function getGames(membershipId, characterId, finishedCallback, previousDate, mat
     page = page || 0;
     var summaryUrl = "http://proxy.guardian.gg/Platform/Destiny/Stats/ActivityHistory/1/"
         + membershipId + "/"
-        + characterId + "/?mode=14&definitions=true&count=25"
+        + characterId + "/?mode=14&definitions=true&count=50"
         + "&page=" + page + "&lc=en";
 
     request({
@@ -211,7 +209,7 @@ function getGames(membershipId, characterId, finishedCallback, previousDate, mat
                         instanceId: activity.activityDetails.instanceId,
                         date: moment(activity.period)
                     }
-                }))
+                }));
 
                 getGames(membershipId, characterId, finishedCallback, previousDate, matches, ++page);
             }
@@ -231,24 +229,36 @@ function getSummary(membershipId, characters) {
             matches = matches.concat(results);
             charsCompleted += 1;
             if (charsCompleted === characters.length) {
-                pBar = new ProgressBar('Fetching details for :total matches... [:bar] :percent', {
-                    complete: '=',
-                    incomplete: ' ',
-                    width: 30,
-                    total: matches.length
-                });
 
                 var matchesToFetch = [];
                 matches.sort(function(a,b) { return b.date - a.date; })
                     .some(function(m) {
-                        matchesToFetch.push(m);
-                        return m.id === lastActivityId;
+                        if (lastActivityId) {
+                            if (m.instanceId !== lastActivityId) {
+                                matchesToFetch.push(m);
+                            }
+                            return m.instanceId === lastActivityId;
+                        } else {
+                            matchesToFetch.push(m);
+                            return false;
+                        }
                     });
 
-                matchesToFetch.forEach(function (match) {
-                    gameDoneEmitter.emit("gameStart");
-                    getDetails(match);
+                pBar = new ProgressBar('Fetching details for :total matches... [:bar] :percent', {
+                    complete: '=',
+                    incomplete: ' ',
+                    width: 30,
+                    total: matchesToFetch.length
                 });
+
+                if (matchesToFetch.length > 0) {
+                    matchesToFetch.forEach(function (match) {
+                        gameDoneEmitter.emit("gameStart");
+                        getDetails(match);
+                    });
+                } else {
+                    console.log("No new games to fetch.");
+                }
             }
 
         });
@@ -339,7 +349,7 @@ function summarize(games) {
         ]
     });
 
-    writer.pipe(fs.createWriteStream("./out/" + userName + ".summary.csv"))
+    writer.pipe(fs.createWriteStream("./out/" + userName + ".summary.csv"));
     summary.forEach(function (r) {
         writer.write([r.date, r.map, r.matchWins, r.matchLosses, r.matchRatio, r.roundWins, r.roundLosses, r.roundRatio, r.playerKD, r.playerKAD]);
     });
@@ -358,8 +368,9 @@ var lastActivityId;
 try {
     fs.accessSync(gameFilename, fs.F_OK);
     var prevGames = require(gameFilename);
-    var sorted = prevGames.sort(function(a,b) { return a.date - b.date; });
-    lastActivityId = sorted[sorted.length - 1].id;
+    var sorted = prevGames.sort(function(a,b) { return b.date - a.date; });
+    games = prevGames;
+    lastActivityId = sorted[0].id;
 } catch (e) {
     console.warn("No previous games found, fetching all games for " + userName + ".");
 }
@@ -370,4 +381,4 @@ if (!fs.existsSync("./out")) {
     fs.mkdirSync("./out");
 }
 
-lookupPlayer(userName, lastActivityId);
+lookupPlayer(userName);

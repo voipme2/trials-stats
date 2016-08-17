@@ -106,7 +106,9 @@ function getPlayerElos(callback) {
     });
 
     request({
-        url: "http://api.guardian.gg/elo/history/" + Object.keys(players).join(',') + "?start=" + startDate.format("YYYY-MM-DD") + "&end=" + endDate.format("YYYY-MM-DD") + "&mode=14",
+        url: "http://api.guardian.gg/elo/history/" + Object.keys(players).join(',')
+            + "?start=" + startDate.format("YYYY-MM-DD")
+            + "&end=" + endDate.format("YYYY-MM-DD") + "&mode=14",
         json: true
     }, function(error, response, body) {
         if (!error && response.statusCode === 200) {
