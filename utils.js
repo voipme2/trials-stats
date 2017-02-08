@@ -83,11 +83,11 @@ module.exports = {
     },
     saveDetails: function(games, mode) {
         var gamesStr = JSON.stringify(games, null, 2);
-        if (!fs.existsSync("./out")) {
-            fs.mkdirSync("./out");
+        if (!fs.existsSync("./data")) {
+            fs.mkdirSync("./data");
         }
 
-        fs.writeFile("./out/" + userName + "-" + mode + "-games.json", gamesStr, function (err) {
+        fs.writeFile("./data/" + userName + "-" + mode + "-games.json", gamesStr, function (err) {
             if (err) throw err;
         });
     }

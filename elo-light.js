@@ -43,7 +43,7 @@ function getEloLightChart() {
     var games = loadGames(userName);
 
     var writer = csv({ headers: ["Map", "Our Elo", "Enemy Elo", "Elo Diff", "Our Score", "Enemy Score", "Result"] });
-    writer.pipe(fs.createWriteStream("./out/" + userName + ".elolight.csv"));
+    writer.pipe(fs.createWriteStream("./data/" + userName + ".elolight.csv"));
 
     games.forEach(function(g) {
         var myTeamName = g.players[userName].teamName;
@@ -69,7 +69,7 @@ function getEloLightChart() {
 
 function loadGames(username) {
     try {
-        var fname = "./out/" + username + ".games.json";
+        var fname = "./data/" + username + ".games.json";
         fs.accessSync(fname, fs.F_OK);
         return require(fname);
     } catch (e) {
@@ -121,7 +121,7 @@ function getPlayerElos(callback) {
             // players is now up to date with the ELOs
 
             var writer = csv({ headers: ["Date", "Map", "Our Elo", "Enemy Elo", "Elo Diff", "Our Score", "Enemy Score", "Result"] });
-            writer.pipe(fs.createWriteStream("./out/" + userName + "-elos.csv"));
+            writer.pipe(fs.createWriteStream("./data/" + userName + "-elos.csv"));
 
             games.forEach(function(g) {
                 var myTeamName = g.players[userName].teamName;

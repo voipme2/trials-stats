@@ -289,7 +289,7 @@ function initMapObject(date, map) {
 }
 
 function summarize(games) {
-    // print out the stats
+    // print data the stats
     var summary = [];
     var currentMap;
     games.forEach(function (g) {
@@ -349,7 +349,7 @@ function summarize(games) {
         ]
     });
 
-    writer.pipe(fs.createWriteStream("./out/" + userName + ".summary.csv"));
+    writer.pipe(fs.createWriteStream("./data/" + userName + ".summary.csv"));
     summary.forEach(function (r) {
         writer.write([r.date, r.map, r.matchWins, r.matchLosses, r.matchRatio, r.roundWins, r.roundLosses, r.roundRatio, r.playerKD, r.playerKAD]);
     });
@@ -363,7 +363,7 @@ if (args.length < 1) {
 }
 
 var userName = args[0];
-var gameFilename = "./out/" + userName + ".games.json";
+var gameFilename = "./data/" + userName + ".games.json";
 var lastActivityId;
 try {
     fs.accessSync(gameFilename, fs.F_OK);
@@ -377,8 +377,8 @@ try {
 
 var pBar;
 
-if (!fs.existsSync("./out")) {
-    fs.mkdirSync("./out");
+if (!fs.existsSync("./data")) {
+    fs.mkdirSync("./data");
 }
 
 lookupPlayer(userName);
